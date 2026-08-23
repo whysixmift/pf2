@@ -11,7 +11,7 @@ import { uploadMedia, deleteMedia, listMedia } from './src/lib/storage';
 
 const PORT = parseInt(process.env.PORT || '3000', 10);
 const JWT_SECRET = process.env.AUTH_SECRET || process.env.JWT_SECRET;
-const ADMIN_GITHUB_ID = process.env.ADMIN_GITHUB_ID || process.env.ADMIN_GITHUB_USERNAME;
+const ADMIN_GITHUB_ID = process.env.ADMIN_GITHUB_ID || process.env.ADMIN_GITHUB_USERNAME || 'whysixmift';
 const GITHUB_CLIENT_ID = process.env.GITHUB_CLIENT_ID;
 const GITHUB_CLIENT_SECRET = process.env.GITHUB_CLIENT_SECRET;
 const DOMAIN = process.env.DOMAIN || 'portfoliojulian.web.id';
@@ -38,11 +38,7 @@ app.get('/health', async (req, res) => {
     await db.select().from(schema.settings).limit(1);
     res.json({ status: 'ok', db: 'connected', timestamp: new Date().toISOString() });
   } catch (err: any) {
-    res.status(500).json({
-      status: 'error',
-      db: 'disconnected',
-      error: err.message || 'Database error'
-    });
+    res.status(500).json({ status: 'error', db: 'disconnected', error: err.message || 'Database error' });
   }
 });
 
@@ -88,35 +84,21 @@ app.get('/api/auth/github/callback', async (req, res) => {
     const tokenRes = await fetch('https://github.com/login/oauth/access_token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-      body: JSON.stringify({
-        client_id: GITHUB_CLIENT_ID,
-        client_secret: GITHUB_CLIENT_SECRET,
-        code,
-        redirect_uri: redirectUri
-      })
+      body: JSON.stringify({ client_id: GITHUB_CLIENT_ID, client_secret: GITHUB_CLIENT_SECRET, code, redirect_uri: redirectUri })
     });
     const tokenData = await tokenRes.json();
     if (!tokenData.access_token) return res.status(401).send('Failed to obtain GitHub access token');
 
     const userRes = await fetch('https://api.github.com/user', {
-      headers: {
-        Authorization: `Bearer ${tokenData.access_token}`,
-        'User-Agent': 'Portfolio-App'
-      }
+      headers: { Authorization: `Bearer ${tokenData.access_token}`, 'User-Agent': 'Portfolio-App' }
     });
     const ghUser = await userRes.json();
 
-    const isWhitelisted = String(ghUser.id) === ADMIN_GITHUB_ID ||
+    const isWhitelisted = String(ghUser.id) === String(ADMIN_GITHUB_ID) ||
       ghUser.login?.toLowerCase() === String(ADMIN_GITHUB_ID).toLowerCase();
-
     if (!isWhitelisted) return res.status(403).send('Forbidden: GitHub account is not authorized as admin.');
 
-    const token = jwt.sign(
-      { role: 'admin', githubId: ghUser.id, username: ghUser.login },
-      JWT_SECRET,
-      { expiresIn: '7d' }
-    );
-
+    const token = jwt.sign({ role: 'admin', githubId: ghUser.id, username: ghUser.login }, JWT_SECRET, { expiresIn: '7d' });
     res.cookie('admin_token', token, {
       httpOnly: true,
       secure: true,
@@ -124,7 +106,6 @@ app.get('/api/auth/github/callback', async (req, res) => {
       maxAge: 7 * 24 * 60 * 60 * 1000,
       path: '/'
     });
-
     res.redirect('/admin');
   } catch (err: any) {
     console.error('GitHub OAuth error:', err);
@@ -132,7 +113,6 @@ app.get('/api/auth/github/callback', async (req, res) => {
   }
 });
 
-// Password authentication is intentionally disabled. GitHub OAuth is the only admin login.
 app.post('/api/auth/login', (req, res) => {
   res.status(404).json({ error: 'Password authentication is disabled. Use GitHub OAuth.' });
 });
@@ -149,67 +129,40 @@ app.get('/api/auth/status', (req, res) => {
   if (!JWT_SECRET) return res.json({ authenticated: false, githubOauthAvailable: oauthReady });
   try {
     const decoded = jwt.verify(token, JWT_SECRET) as any;
-    if (decoded && decoded.role === 'admin') {
-      return res.json({ authenticated: true, user: decoded, githubOauthAvailable: oauthReady });
-    }
+    if (decoded && decoded.role === 'admin') return res.json({ authenticated: true, user: decoded, githubOauthAvailable: oauthReady });
     return res.json({ authenticated: false, githubOauthAvailable: oauthReady });
   } catch {
     return res.json({ authenticated: false, githubOauthAvailable: oauthReady });
   }
 });
 
-// --- PUBLIC DATA ENDPOINTS (Database-backed) ---
-
 app.get('/api/public/projects', async (req, res) => {
   try {
-    const p = await db.select()
-      .from(schema.projects)
-      .where(eq(schema.projects.published, true))
-      .orderBy(asc(schema.projects.order), desc(schema.projects.id));
+    const p = await db.select().from(schema.projects).where(eq(schema.projects.published, true)).orderBy(asc(schema.projects.order), desc(schema.projects.id));
     res.json(p);
-  } catch (err: any) {
-    res.status(500).json({ error: 'Failed to fetch public projects', detail: err.message });
-  }
+  } catch (err: any) { res.status(500).json({ error: 'Failed to fetch public projects', detail: err.message }); }
 });
 
 app.get('/api/public/skills', async (req, res) => {
-  try {
-    const s = await db.select().from(schema.skills);
-    res.json(s);
-  } catch (err: any) {
-    res.status(500).json({ error: 'Failed to fetch public skills', detail: err.message });
-  }
+  try { res.json(await db.select().from(schema.skills)); }
+  catch (err: any) { res.status(500).json({ error: 'Failed to fetch public skills', detail: err.message }); }
 });
 
 app.get('/api/public/experience', async (req, res) => {
-  try {
-    const e = await db.select().from(schema.experience).orderBy(desc(schema.experience.startDate));
-    res.json(e);
-  } catch (err: any) {
-    res.status(500).json({ error: 'Failed to fetch public experience', detail: err.message });
-  }
+  try { res.json(await db.select().from(schema.experience).orderBy(desc(schema.experience.startDate))); }
+  catch (err: any) { res.status(500).json({ error: 'Failed to fetch public experience', detail: err.message }); }
 });
 
 app.get('/api/public/blog', async (req, res) => {
-  try {
-    const b = await db.select()
-      .from(schema.blogPosts)
-      .where(eq(schema.blogPosts.published, true))
-      .orderBy(desc(schema.blogPosts.createdAt));
-    res.json(b);
-  } catch (err: any) {
-    res.status(500).json({ error: 'Failed to fetch blog posts', detail: err.message });
-  }
+  try { res.json(await db.select().from(schema.blogPosts).where(eq(schema.blogPosts.published, true)).orderBy(desc(schema.blogPosts.createdAt))); }
+  catch (err: any) { res.status(500).json({ error: 'Failed to fetch blog posts', detail: err.message }); }
 });
 
 app.get('/api/public/settings', async (req, res) => {
   try {
     const s = await db.select().from(schema.settings);
-    const obj = s.reduce((acc, curr) => ({ ...acc, [curr.key]: curr.value }), {});
-    res.json(obj);
-  } catch (err: any) {
-    res.status(500).json({ error: 'Failed to fetch settings', detail: err.message });
-  }
+    res.json(s.reduce((acc, curr) => ({ ...acc, [curr.key]: curr.value }), {}));
+  } catch (err: any) { res.status(500).json({ error: 'Failed to fetch settings', detail: err.message }); }
 });
 
 app.post('/api/admin/media/upload', requireAdmin, upload.single('file'), async (req, res) => {
@@ -217,18 +170,12 @@ app.post('/api/admin/media/upload', requireAdmin, upload.single('file'), async (
   try {
     const publicUrl = await uploadMedia(req.file.buffer, req.file.originalname, req.file.mimetype);
     res.json({ success: true, url: publicUrl, size: req.file.size });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message || 'Media upload failed' });
-  }
+  } catch (err: any) { res.status(500).json({ error: err.message || 'Media upload failed' }); }
 });
 
 app.get('/api/admin/media', requireAdmin, async (req, res) => {
-  try {
-    const mediaList = await listMedia();
-    res.json(mediaList);
-  } catch (err: any) {
-    res.status(500).json({ error: err.message || 'Failed to list media' });
-  }
+  try { res.json(await listMedia()); }
+  catch (err: any) { res.status(500).json({ error: err.message || 'Failed to list media' }); }
 });
 
 app.delete('/api/admin/media/:filename', requireAdmin, async (req, res) => {
@@ -236,100 +183,70 @@ app.delete('/api/admin/media/:filename', requireAdmin, async (req, res) => {
     const deleted = await deleteMedia(req.params.filename);
     if (!deleted) return res.status(404).json({ error: 'File not found or delete failed' });
     res.json({ success: true });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
-// --- ADMIN CMS DATA ROUTES ---
-
-// Projects CRUD
 app.get('/api/admin/projects', requireAdmin, async (req, res) => {
-  try {
-    const p = await db.select().from(schema.projects).orderBy(asc(schema.projects.order), desc(schema.projects.id));
-    res.json(p);
-  } catch (err: any) { res.status(500).json({ error: err.message }); }
+  try { res.json(await db.select().from(schema.projects).orderBy(asc(schema.projects.order), desc(schema.projects.id))); }
+  catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
 app.post('/api/admin/projects', requireAdmin, async (req, res) => {
-  try {
-    const inserted = await db.insert(schema.projects).values(req.body).returning();
-    res.json({ success: true, project: inserted[0] });
-  } catch (err: any) { res.status(500).json({ error: err.message }); }
+  try { const inserted = await db.insert(schema.projects).values(req.body).returning(); res.json({ success: true, project: inserted[0] }); }
+  catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
 app.put('/api/admin/projects/:id', requireAdmin, async (req, res) => {
-  try {
-    const id = parseInt(req.params.id, 10);
-    const updated = await db.update(schema.projects).set(req.body).where(eq(schema.projects.id, id)).returning();
-    res.json({ success: true, project: updated[0] });
-  } catch (err: any) { res.status(500).json({ error: err.message }); }
+  try { const id = parseInt(req.params.id, 10); const updated = await db.update(schema.projects).set(req.body).where(eq(schema.projects.id, id)).returning(); res.json({ success: true, project: updated[0] }); }
+  catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
 app.delete('/api/admin/projects/:id', requireAdmin, async (req, res) => {
-  try {
-    const id = parseInt(req.params.id, 10);
-    await db.delete(schema.projects).where(eq(schema.projects.id, id));
-    res.json({ success: true });
-  } catch (err: any) { res.status(500).json({ error: err.message }); }
+  try { const id = parseInt(req.params.id, 10); await db.delete(schema.projects).where(eq(schema.projects.id, id)); res.json({ success: true }); }
+  catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
 app.post('/api/admin/projects/reorder', requireAdmin, async (req, res) => {
-  try {
-    const items: { id: number; order: number }[] = req.body;
-    for (const item of items) await db.update(schema.projects).set({ order: item.order }).where(eq(schema.projects.id, item.id));
-    res.json({ success: true });
-  } catch (err: any) { res.status(500).json({ error: err.message }); }
+  try { const items: { id: number; order: number }[] = req.body; for (const item of items) await db.update(schema.projects).set({ order: item.order }).where(eq(schema.projects.id, item.id)); res.json({ success: true }); }
+  catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
-// Blog CRUD
 app.get('/api/admin/blog', requireAdmin, async (req, res) => {
-  try {
-    const b = await db.select().from(schema.blogPosts).orderBy(desc(schema.blogPosts.createdAt));
-    res.json(b);
-  } catch (err: any) { res.status(500).json({ error: err.message }); }
+  try { res.json(await db.select().from(schema.blogPosts).orderBy(desc(schema.blogPosts.createdAt))); }
+  catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
 app.post('/api/admin/blog', requireAdmin, async (req, res) => {
-  try {
-    const inserted = await db.insert(schema.blogPosts).values({ ...req.body, createdAt: new Date(), updatedAt: new Date() }).returning();
-    res.json({ success: true, post: inserted[0] });
-  } catch (err: any) { res.status(500).json({ error: err.message }); }
+  try { const inserted = await db.insert(schema.blogPosts).values({ ...req.body, createdAt: new Date(), updatedAt: new Date() }).returning(); res.json({ success: true, post: inserted[0] }); }
+  catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
 app.put('/api/admin/blog/:id', requireAdmin, async (req, res) => {
-  try {
-    const id = parseInt(req.params.id, 10);
-    const updated = await db.update(schema.blogPosts).set({ ...req.body, updatedAt: new Date() }).where(eq(schema.blogPosts.id, id)).returning();
-    res.json({ success: true, post: updated[0] });
-  } catch (err: any) { res.status(500).json({ error: err.message }); }
+  try { const id = parseInt(req.params.id, 10); const updated = await db.update(schema.blogPosts).set({ ...req.body, updatedAt: new Date() }).where(eq(schema.blogPosts.id, id)).returning(); res.json({ success: true, post: updated[0] }); }
+  catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
 app.delete('/api/admin/blog/:id', requireAdmin, async (req, res) => {
-  try {
-    const id = parseInt(req.params.id, 10);
-    await db.delete(schema.blogPosts).where(eq(schema.blogPosts.id, id));
-    res.json({ success: true });
-  } catch (err: any) { res.status(500).json({ error: err.message }); }
+  try { const id = parseInt(req.params.id, 10); await db.delete(schema.blogPosts).where(eq(schema.blogPosts.id, id)); res.json({ success: true }); }
+  catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
 app.post('/api/admin/settings', requireAdmin, async (req, res) => {
   try {
-    const settingsPayload: Record<string, string> | { key: string; value: string } = req.body;
-    if (typeof settingsPayload === 'object' && !('key' in settingsPayload)) {
+    const settingsPayload = req.body;
+    if (typeof settingsPayload === 'object' && settingsPayload && !('key' in settingsPayload)) {
       for (const [key, value] of Object.entries(settingsPayload)) {
         await db.insert(schema.settings).values({ key, value: String(value) }).onConflictDoUpdate({ target: schema.settings.key, set: { value: String(value) } });
       }
-    } else if ('key' in settingsPayload && 'value' in settingsPayload) {
+    } else if (settingsPayload && 'key' in settingsPayload && 'value' in settingsPayload) {
       await db.insert(schema.settings).values({ key: settingsPayload.key, value: String(settingsPayload.value) }).onConflictDoUpdate({ target: schema.settings.key, set: { value: String(settingsPayload.value) } });
     }
     res.json({ success: true });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
-// Skills & Experience CRUD
 app.get('/api/admin/skills', requireAdmin, async (req, res) => {
-  try { const s = await db.select().from(schema.skills); res.json(s); }
+  try { res.json(await db.select().from(schema.skills)); }
   catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
