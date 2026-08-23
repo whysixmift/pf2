@@ -5,6 +5,7 @@ export default function AdminProjects() {
   const [loading, setLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
   const [currentProject, setCurrentProject] = useState<any>(null);
+  const [uploading, setUploading] = useState(false);
   
   const [formData, setFormData] = useState({
     title: "",
@@ -16,7 +17,8 @@ export default function AdminProjects() {
     projectUrl: "",
     githubUrl: "",
     published: false,
-    featured: false
+    featured: false,
+    order: 0
   });
 
   const fetchProjects = () => {
@@ -33,6 +35,30 @@ export default function AdminProjects() {
     fetchProjects();
   }, []);
 
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploading(true);
+    const body = new FormData();
+    body.append('file', file);
+
+    try {
+      const res = await fetch('/api/admin/media/upload', {
+        method: 'POST',
+        body
+      });
+      const data = await res.json();
+      if (data.url) {
+        setFormData(prev => ({ ...prev, coverImage: data.url }));
+      }
+    } catch {
+      alert("Failed to upload image.");
+    } finally {
+      setUploading(false);
+    }
+  };
+
   const handleEdit = (project: any) => {
     setCurrentProject(project);
     setFormData({
@@ -45,7 +71,8 @@ export default function AdminProjects() {
       projectUrl: project.projectUrl || "",
       githubUrl: project.githubUrl || "",
       published: project.published || false,
-      featured: project.featured || false
+      featured: project.featured || false,
+      order: project.order || 0
     });
     setIsEditing(true);
   };
@@ -62,7 +89,8 @@ export default function AdminProjects() {
       projectUrl: "",
       githubUrl: "",
       published: false,
-      featured: false
+      featured: false,
+      order: projects.length
     });
     setIsEditing(true);
   };
@@ -89,6 +117,26 @@ export default function AdminProjects() {
     }
   };
 
+  const moveOrder = async (index: number, direction: 'up' | 'down') => {
+    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= projects.length) return;
+
+    const newProjects = [...projects];
+    const temp = newProjects[index];
+    newProjects[index] = newProjects[targetIndex];
+    newProjects[targetIndex] = temp;
+
+    const reordered = newProjects.map((p, idx) => ({ id: p.id, order: idx }));
+    setProjects(newProjects);
+
+    await fetch('/api/admin/projects/reorder', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(reordered)
+    });
+    fetchProjects();
+  };
+
   if (isEditing) {
     return (
       <div className="space-y-6">
@@ -103,7 +151,17 @@ export default function AdminProjects() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
               <label className="block text-sm font-medium text-neutral-700">Title</label>
-              <input type="text" required value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} className="mt-1 block w-full rounded-md border border-neutral-300 px-3 py-2 text-sm focus:border-neutral-500 focus:outline-none focus:ring-1 focus:ring-neutral-500" />
+              <input 
+                type="text" 
+                required 
+                value={formData.title} 
+                onChange={e => {
+                  const title = e.target.value;
+                  const autoSlug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+                  setFormData({ ...formData, title, slug: formData.slug || autoSlug });
+                }} 
+                className="mt-1 block w-full rounded-md border border-neutral-300 px-3 py-2 text-sm focus:border-neutral-500 focus:outline-none focus:ring-1 focus:ring-neutral-500" 
+              />
             </div>
             <div>
               <label className="block text-sm font-medium text-neutral-700">Slug</label>
@@ -113,10 +171,27 @@ export default function AdminProjects() {
               <label className="block text-sm font-medium text-neutral-700">Short Description</label>
               <input type="text" required value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} className="mt-1 block w-full rounded-md border border-neutral-300 px-3 py-2 text-sm focus:border-neutral-500 focus:outline-none focus:ring-1 focus:ring-neutral-500" />
             </div>
+            
             <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-neutral-700">Cover Image URL</label>
-              <input type="url" value={formData.coverImage} onChange={e => setFormData({...formData, coverImage: e.target.value})} className="mt-1 block w-full rounded-md border border-neutral-300 px-3 py-2 text-sm focus:border-neutral-500 focus:outline-none focus:ring-1 focus:ring-neutral-500" placeholder="https://..." />
+              <label className="block text-sm font-medium text-neutral-700">Cover Image</label>
+              <div className="mt-1 flex items-center gap-4">
+                <input 
+                  type="text" 
+                  value={formData.coverImage} 
+                  onChange={e => setFormData({...formData, coverImage: e.target.value})} 
+                  className="flex-1 rounded-md border border-neutral-300 px-3 py-2 text-sm focus:border-neutral-500 focus:outline-none focus:ring-1 focus:ring-neutral-500" 
+                  placeholder="https://... or /uploads/..." 
+                />
+                <label className="cursor-pointer bg-neutral-100 hover:bg-neutral-200 border border-neutral-300 px-4 py-2 rounded-md text-sm font-medium text-neutral-700">
+                  {uploading ? "Uploading..." : "Upload File"}
+                  <input type="file" accept="image/*" onChange={handleFileUpload} className="hidden" />
+                </label>
+              </div>
+              {formData.coverImage && (
+                <img src={formData.coverImage} alt="Cover preview" className="mt-2 h-20 w-32 object-cover rounded border border-neutral-200" />
+              )}
             </div>
+
             <div className="md:col-span-2">
               <label className="block text-sm font-medium text-neutral-700">Technologies (comma separated)</label>
               <input type="text" value={formData.technologies} onChange={e => setFormData({...formData, technologies: e.target.value})} className="mt-1 block w-full rounded-md border border-neutral-300 px-3 py-2 text-sm focus:border-neutral-500 focus:outline-none focus:ring-1 focus:ring-neutral-500" />
@@ -164,6 +239,7 @@ export default function AdminProjects() {
         <table className="min-w-full divide-y divide-neutral-200">
           <thead className="bg-neutral-50">
             <tr>
+              <th className="px-6 py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider">Order</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider">Title</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider">Status</th>
               <th className="px-6 py-3 text-right text-xs font-medium text-neutral-500 uppercase tracking-wider">Actions</th>
@@ -171,12 +247,18 @@ export default function AdminProjects() {
           </thead>
           <tbody className="bg-white divide-y divide-neutral-200">
             {loading ? (
-              <tr><td colSpan={3} className="px-6 py-4 text-center text-sm text-neutral-500">Loading...</td></tr>
+              <tr><td colSpan={4} className="px-6 py-4 text-center text-sm text-neutral-500">Loading...</td></tr>
             ) : projects.length === 0 ? (
-              <tr><td colSpan={3} className="px-6 py-4 text-center text-sm text-neutral-500">No projects found.</td></tr>
+              <tr><td colSpan={4} className="px-6 py-4 text-center text-sm text-neutral-500">No projects found.</td></tr>
             ) : (
-              projects.map(p => (
+              projects.map((p, idx) => (
                 <tr key={p.id}>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-neutral-500">
+                    <div className="flex items-center gap-1">
+                      <button onClick={() => moveOrder(idx, 'up')} disabled={idx === 0} className="p-1 text-neutral-400 hover:text-neutral-900 disabled:opacity-30">▲</button>
+                      <button onClick={() => moveOrder(idx, 'down')} disabled={idx === projects.length - 1} className="p-1 text-neutral-400 hover:text-neutral-900 disabled:opacity-30">▼</button>
+                    </div>
+                  </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-neutral-900">{p.title}</td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-neutral-500">
                     <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${p.published ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>

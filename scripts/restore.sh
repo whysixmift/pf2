@@ -9,20 +9,21 @@ fi
 BACKUP_FILE=$1
 
 if [ ! -f "$BACKUP_FILE" ]; then
-  echo "❌ Backup file not found: $BACKUP_FILE"
+  echo "❌ Error: Backup file not found at $BACKUP_FILE"
   exit 1
 fi
 
-echo "⚠️ WARNING: This will overwrite the current database."
-read -p "Are you sure you want to proceed? (y/n) " -n 1 -r
-echo
-if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+echo "⚠️  WARNING: Destructive Operation!"
+echo "This will replace all tables and data in the PostgreSQL database with content from:"
+echo "👉 $BACKUP_FILE"
+read -p "Type 'RESTORE' to confirm: " CONFIRMATION
+
+if [ "$CONFIRMATION" != "RESTORE" ]; then
   echo "Restore cancelled."
-  exit 1
+  exit 0
 fi
 
 echo "🔄 Restoring database from $BACKUP_FILE..."
-# Drop and recreate schema to ensure clean restore (or just run psql)
 cat "$BACKUP_FILE" | docker compose exec -T db psql -U portfolio -d portfolio
 
-echo "✅ Restore completed successfully."
+echo "✅ Database restored successfully."

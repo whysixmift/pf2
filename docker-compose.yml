@@ -1,21 +1,33 @@
-version: '3.8'
-
 services:
   app:
     build: .
-    image: portfolio-app
+    image: portfolio-app:latest
     container_name: portfolio-app
     restart: always
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     environment:
-      - DATABASE_URL=postgres://${POSTGRES_USER:-portfolio}:${POSTGRES_PASSWORD:-portfolio_secure_pass}@db:5432/${POSTGRES_DB:-portfolio}
-      - JWT_SECRET=${JWT_SECRET:-generate_a_secure_secret_in_production}
+      - DATABASE_URL=${DATABASE_URL:-postgres://portfolio:portfolio_secure_pass@db:5432/portfolio}
+      - AUTH_SECRET=${AUTH_SECRET:-${JWT_SECRET:-generate_a_secure_secret_in_production}}
+      - JWT_SECRET=${AUTH_SECRET:-${JWT_SECRET:-generate_a_secure_secret_in_production}}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
+      - ADMIN_GITHUB_ID=${ADMIN_GITHUB_ID}
+      - GITHUB_CLIENT_ID=${GITHUB_CLIENT_ID}
+      - GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET}
+      - DOMAIN=${DOMAIN:-localhost}
       - PORT=3000
       - NODE_ENV=production
+    volumes:
+      - uploads_data:/app/uploads
     depends_on:
       db:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://127.0.0.1:3000/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
 
   db:
     image: postgres:15-alpine
@@ -28,10 +40,13 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
-      interval: 10s
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-portfolio} -d $${POSTGRES_DB:-portfolio}"]
+      interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 10
 
 volumes:
   pgdata:
+    name: portfolio_pgdata
+  uploads_data:
+    name: portfolio_uploads_data

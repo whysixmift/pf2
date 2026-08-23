@@ -5,6 +5,7 @@ export default function AdminBlog() {
   const [loading, setLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
   const [currentPost, setCurrentPost] = useState<any>(null);
+  const [uploading, setUploading] = useState(false);
   
   const [formData, setFormData] = useState({
     title: "",
@@ -28,6 +29,30 @@ export default function AdminBlog() {
   useEffect(() => {
     fetchPosts();
   }, []);
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploading(true);
+    const body = new FormData();
+    body.append('file', file);
+
+    try {
+      const res = await fetch('/api/admin/media/upload', {
+        method: 'POST',
+        body
+      });
+      const data = await res.json();
+      if (data.url) {
+        setFormData(prev => ({ ...prev, coverImage: data.url }));
+      }
+    } catch {
+      alert("Failed to upload cover image.");
+    } finally {
+      setUploading(false);
+    }
+  };
 
   const handleEdit = (post: any) => {
     setCurrentPost(post);
@@ -91,7 +116,17 @@ export default function AdminBlog() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
               <label className="block text-sm font-medium text-neutral-700">Title</label>
-              <input type="text" required value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} className="mt-1 block w-full rounded-md border border-neutral-300 px-3 py-2 text-sm focus:border-neutral-500 focus:outline-none focus:ring-1 focus:ring-neutral-500" />
+              <input 
+                type="text" 
+                required 
+                value={formData.title} 
+                onChange={e => {
+                  const title = e.target.value;
+                  const autoSlug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+                  setFormData({ ...formData, title, slug: formData.slug || autoSlug });
+                }} 
+                className="mt-1 block w-full rounded-md border border-neutral-300 px-3 py-2 text-sm focus:border-neutral-500 focus:outline-none focus:ring-1 focus:ring-neutral-500" 
+              />
             </div>
             <div>
               <label className="block text-sm font-medium text-neutral-700">Slug</label>
@@ -105,9 +140,25 @@ export default function AdminBlog() {
               <label className="block text-sm font-medium text-neutral-700">Content (Markdown)</label>
               <textarea rows={12} required value={formData.content} onChange={e => setFormData({...formData, content: e.target.value})} className="mt-1 block w-full rounded-md border border-neutral-300 px-3 py-2 text-sm focus:border-neutral-500 focus:outline-none focus:ring-1 focus:ring-neutral-500 font-mono" />
             </div>
+            
             <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-neutral-700">Cover Image URL</label>
-              <input type="url" value={formData.coverImage} onChange={e => setFormData({...formData, coverImage: e.target.value})} className="mt-1 block w-full rounded-md border border-neutral-300 px-3 py-2 text-sm focus:border-neutral-500 focus:outline-none focus:ring-1 focus:ring-neutral-500" placeholder="https://..." />
+              <label className="block text-sm font-medium text-neutral-700">Cover Image</label>
+              <div className="mt-1 flex items-center gap-4">
+                <input 
+                  type="text" 
+                  value={formData.coverImage} 
+                  onChange={e => setFormData({...formData, coverImage: e.target.value})} 
+                  className="flex-1 rounded-md border border-neutral-300 px-3 py-2 text-sm focus:border-neutral-500 focus:outline-none focus:ring-1 focus:ring-neutral-500" 
+                  placeholder="https://... or /uploads/..." 
+                />
+                <label className="cursor-pointer bg-neutral-100 hover:bg-neutral-200 border border-neutral-300 px-4 py-2 rounded-md text-sm font-medium text-neutral-700">
+                  {uploading ? "Uploading..." : "Upload File"}
+                  <input type="file" accept="image/*" onChange={handleFileUpload} className="hidden" />
+                </label>
+              </div>
+              {formData.coverImage && (
+                <img src={formData.coverImage} alt="Cover preview" className="mt-2 h-20 w-32 object-cover rounded border border-neutral-200" />
+              )}
             </div>
             
             <div className="flex items-center gap-6 mt-4 md:col-span-2">
