@@ -1,0 +1,55 @@
+@import "tailwindcss";
+
+@layer base {
+  html, body {
+    overflow-x: hidden;
+  }
+}
+
+@theme {
+  --color-luxury-bg: #0A0A0A;
+  --color-luxury-surface: #121212;
+  --color-luxury-fg: #F2F2F0;
+  --color-luxury-muted: #858585;
+  --color-luxury-border: #272727;
+  --color-luxury-accent: #FF4D00;
+  
+  --font-sans: 'Manrope', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+}
+
+@layer utilities {
+  .text-display {
+    font-size: clamp(2.5rem, 8vw, 8rem);
+    line-height: 1;
+    letter-spacing: -0.02em;
+    font-weight: 500;
+    text-transform: uppercase;
+  }
+  
+  .text-heading {
+    font-size: clamp(2rem, 5vw, 4.5rem);
+    line-height: 1.1;
+    letter-spacing: -0.02em;
+    font-weight: 500;
+  }
+  
+  .text-metadata {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--color-luxury-muted);
+  }
+
+  .text-body-large {
+    font-size: clamp(1.125rem, 2vw, 1.5rem);
+    line-height: 1.6;
+    font-weight: 300;
+  }
+
+  .spacing-section {
+    padding-top: clamp(6rem, 15vw, 12rem);
+    padding-bottom: clamp(6rem, 15vw, 12rem);
+  }
+}
